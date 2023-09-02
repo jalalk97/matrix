@@ -1,8 +1,17 @@
 class Matrix {
+  static _precision = 4;
   _matrix;
 
   constructor(matrix) {
     this._matrix = matrix.map((row) => row.map(Number));
+  }
+
+  static get precision() {
+    return Matrix._precision;
+  }
+
+  static set precision(decimaPlaces) {
+    Matrix._precision = decimaPlaces;
   }
 
   get shape() {
@@ -194,13 +203,10 @@ class Matrix {
   static forwardSub(l, b) {
     const [n, p] = b.shape;
     const x = Matrix.zeros(n, p);
-    x._matrix[0] = b
-      .sliceRows(0, 1)
-      .scalarMultiply(1 / l._matrix[0][0])._matrix[0];
-    for (let i = 1; i < n; i++) {
+    for (let i = 0; i < n; i++) {
       x._matrix[i] = b
         .sliceRows(i, i + 1)
-        .subtract(l.slice(i, i + 1, 0, i).multiply(x.slice(0, i, 0, p)))
+        .subtract(l.slice(i, i + 1, 0, i + 1).multiply(x.slice(0, i + 1, 0, p)))
         .scalarMultiply(1 / l._matrix[i][i])._matrix[0];
     }
     return x;
@@ -209,13 +215,10 @@ class Matrix {
   static backwardSub(u, b) {
     const [n, p] = b.shape;
     const x = Matrix.zeros(n, p);
-    x._matrix[n - 1] = b
-      .sliceRows(n - 1, n)
-      .scalarMultiply(1 / u._matrix[n - 1][n - 1])._matrix[0];
-    for (let i = n - 2; i >= 0; i--) {
+    for (let i = n - 1; i >= 0; i--) {
       x._matrix[i] = b
         .sliceRows(i, i + 1)
-        .subtract(u.slice(i, i + 1, i + 1, n).multiply(x.slice(i + 1, n, 0, p)))
+        .subtract(u.slice(i, i + 1, i, n).multiply(x.slice(i, n, 0, p)))
         .scalarMultiply(1 / u._matrix[i][i])._matrix[0];
     }
     return x;
@@ -228,8 +231,8 @@ class Matrix {
   }
 
   static lupSolve(l, u, p, b) {
-    const z = p.multiply(b);
-    const x = Matrix.luSolve(l, u, z);
+    const y = p.multiply(b);
+    const x = Matrix.luSolve(l, u, y);
     return x;
   }
 
@@ -251,10 +254,40 @@ class Matrix {
     return inv;
   }
 
+  diag() {
+    return this._matrix.map((row, i) => row[i])
+  }
+
+  trace() {
+    return this.diag().reduce((sum, val) => sum + val);
+  }
+
+  diagProduct() {
+    return this.diag().reduce((prod, val) => prod * val);
+  }
+
+  static lupDet(l, u, p) {
+    const [n] = p.shape;
+    const swaps = n - p.trace() - 1;
+    const detP = (-1) ** swaps;
+    const detL = l.diagProduct();
+    const detU = u.diagProduct();
+    return detP * detL * detU;
+  }
+
+  det() {
+    const [l, u, p] = Matrix.lupDecomp(this); 
+    return Matrix.lupDet(l, u, p);
+  }
+
   toString() {
     const maxEntryWidth = (array) =>
       Math.max(
-        ...array.map((row) => Math.max(...row.map((x) => x.toString().length))),
+        ...array.map((row) =>
+          Math.max(
+            ...row.map((x) => x.toFixed(Matrix.precision).toString().length),
+          ),
+        ),
       );
     const width = maxEntryWidth(this._matrix);
 
@@ -264,14 +297,17 @@ class Matrix {
       .map(
         (row, i) =>
           `${i === 0 ? "[" : " "}[${row
-            .map((x) => x.toString().padStart(width))
+            .map((x) => x.toFixed(Matrix.precision).toString().padStart(width))
             .join(", ")}]${i === m - 1 ? "]" : ""}`,
       )
       .join("\n");
   }
 }
 
+module.exports = Matrix;
+
 function main() {
+  Matrix.precision = 2;
   a = new Matrix([
     [2, -1, 0],
     [-1, 2, -1],
@@ -280,6 +316,7 @@ function main() {
   a_inv = a.inverse();
   console.log(a_inv.toString(), "\n"); // [[3/4, 1/2, 1/4], [1/2, 1, 1/2], [1/4, 1/2, 3/4]]
 
+  Matrix.precision = 0;
   a = new Matrix([
     [2, 1, -1],
     [-3, -1, 2],
@@ -288,6 +325,30 @@ function main() {
   b = new Matrix([[8], [-11], [-3]]);
   x = Matrix.solve(a, b); // [[2], [3], [-1]]
   console.log(x.toString(), "\n");
+
+  a = new Matrix([
+    [-1, 3 / 2],
+    [1, -1],
+  ]);
+  console.log(a.inverse().toString(), "\n");
+
+  a = new Matrix([
+    [6, 2, 3],
+    [1, 1, 1],
+    [0, 4, 9],
+  ])
+  console.log(a.det())
+
+  a = new Matrix([
+    [1, 0, 0],
+    [0, 0, 1],
+    [0, 1, 0],
+  ])
+  const [l, u, p] = Matrix.lupDecomp(a)
+  console.log(l.toString())
+  console.log(u.toString())
+  console.log(p.toString())
+  console.log(Matrix.lupDet(l, u, p))
 }
 
 main();
